@@ -178,6 +178,9 @@ type Priority = 'primary' | 'danger' | 'default';
 const TRAILING_ACTION_INSET = 'lg';
 const TRAILING_ACTION_SPACE = '3xl';
 
+/** Space token above each item of a menu section after the first. See `gapAbove`. */
+export const SECTION_ITEM_GAP = '2xs';
+
 const ITEM_PADDING_BY_SIZE = {
   xs: 'xs md xs lg',
   sm: 'sm md sm lg',
@@ -407,6 +410,13 @@ interface OtherProps<T extends React.ElementType> {
 
 interface MenuListItemProps<T extends React.ElementType = 'li'>
   extends ListItemProps, OtherProps<T> {
+  /**
+   * Spaces the item from the item above it. Used between the items of a menu
+   * section. The space is padding on the item's outer element, so a
+   * virtualized list measures it as part of the row. Hover and press are
+   * handled by the inner content, so the space is not part of their target.
+   */
+  gapAbove?: boolean;
   ref?: React.ComponentPropsWithRef<NoInfer<T>>['ref'];
 }
 
@@ -431,6 +441,7 @@ export function MenuListItem<T extends React.ElementType = 'li'>({
   onDetailsHoverChange,
   tooltip,
   tooltipOptions,
+  gapAbove = false,
   ref,
   trailingActionRef,
   trailingActionWrapperProps,
@@ -497,6 +508,7 @@ export function MenuListItem<T extends React.ElementType = 'li'>({
 
   return (
     <MenuItemWrap
+      gapAbove={gapAbove}
       hasTrailingAction={Boolean(trailingAction)}
       isFocused={isFocused || isDetailsActive}
       aria-disabled={disabled}
@@ -811,12 +823,17 @@ const StyledOverlay = styled(Overlay)<{
   overflow: auto;
 `;
 
-const MenuItemWrap = styled('li')<{hasTrailingAction: boolean; isFocused: boolean}>`
+const MenuItemWrap = styled('li')<{
+  gapAbove: boolean;
+  hasTrailingAction: boolean;
+  isFocused: boolean;
+}>`
   position: ${p => (p.hasTrailingAction ? 'relative' : 'static')};
   ${p => p.hasTrailingAction && p.isFocused && 'z-index: 1;'}
   list-style-type: none;
   margin: 0;
-  padding: 0 ${p => p.theme.space.xs};
+  padding: ${p => (p.gapAbove ? p.theme.space[SECTION_ITEM_GAP] : 0)}
+    ${p => p.theme.space.xs} 0;
   cursor: pointer;
   scroll-margin: ${p => p.theme.space.xs} 0;
 
