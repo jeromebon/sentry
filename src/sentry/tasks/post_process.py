@@ -19,7 +19,7 @@ from sentry_sdk import traces
 from sentry import features, nodestore, options, projectoptions
 from sentry.constants import ObjectStatus
 from sentry.integrations.types import IntegrationProviderSlug
-from sentry.issues.grouptype import GroupCategory
+from sentry.issues.grouptype import PERFORMANCE_ISSUE_CATEGORIES, GroupCategory
 from sentry.issues.issue_occurrence import IssueOccurrence
 from sentry.killswitches import (
     get_killswitch_value,
@@ -1444,6 +1444,26 @@ def feedback_filter_decorator(
     return wrapper
 
 
+def performance_issue_assignment_decorator(
+    func: Callable[[PostProcessJob], None],
+) -> Callable[[PostProcessJob], None]:
+    """
+    Runs an ownership step for performance issues of organizations that opted in, and
+    skips it for every other category going through the generic pipeline.
+    """
+
+    @functools.wraps(func)
+    def wrapper(job: PostProcessJob) -> None:
+        group = job["event"].group
+        if group is None or group.issue_category not in PERFORMANCE_ISSUE_CATEGORIES:
+            return
+        if not features.has("organizations:performance-issues-auto-assignment", group.organization):
+            return
+        return func(job)
+
+    return wrapper
+
+
 def should_postprocess_feedback(job: PostProcessJob) -> bool:
     from sentry.feedback.lib.utils import FeedbackCreationSource
 
@@ -1754,6 +1774,9 @@ GROUP_CATEGORY_POST_PROCESS_PIPELINE: dict[
 GENERIC_POST_PROCESS_PIPELINE: list[Callable[[PostProcessJob], None]] = [
     process_snoozes,
     process_inbox_adds,
+    # Before the workflow engine, so that workflows see the assignee, as for errors.
+    performance_issue_assignment_decorator(handle_owner_assignment),
+    performance_issue_assignment_decorator(handle_auto_assignment),
     kick_off_seer_automation,
     process_workflow_engine,
     process_resource_change_bounds,

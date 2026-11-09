@@ -3868,6 +3868,34 @@ class PostProcessGroupPerformanceTest(
                 eventstream_type=EventStreamEventType.Error.value,
             )
 
+    @with_feature("organizations:performance-issues-auto-assignment")
+    def test_owner_assignment_from_transaction_rule(self) -> None:
+        rule = Rule(Matcher("tags.transaction", "/books/*"), [Owner("team", self.team.slug)])
+        ProjectOwnership.objects.create(
+            project_id=self.project.id,
+            schema=dump_schema([rule]),
+            fallthrough=True,
+            auto_assignment=True,
+        )
+        event = cast(Event, self.create_performance_issue(transaction="/books/{book_id}/"))
+
+        self.call_post_process_group(
+            is_new=True,
+            is_regression=False,
+            is_new_group_environment=True,
+            event=event,
+        )
+
+        group = require_group(event)
+        assignee = group.assignee_set.get()
+        assert assignee.team_id == self.team.id
+        assert assignee.user_id is None
+        owner = GroupOwner.objects.get(group=group)
+        assert (owner.team_id, owner.type) == (self.team.id, GroupOwnerType.OWNERSHIP_RULE.value)
+        activity = Activity.objects.get(group=group, type=ActivityType.ASSIGNED.value)
+        assert activity.data["integration"] == ActivityIntegration.PROJECT_OWNERSHIP.value
+        assert activity.data["rule"] == str(rule)
+
     @patch("sentry.tasks.post_process.handle_owner_assignment")
     @patch("sentry.tasks.post_process.handle_auto_assignment")
     @patch("sentry.tasks.post_process.process_workflow_engine")
